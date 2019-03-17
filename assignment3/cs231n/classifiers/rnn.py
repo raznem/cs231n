@@ -140,7 +140,26 @@ class CaptioningRNN(object):
         # Note also that you are allowed to make use of functions from layers.py   #
         # in your implementation, if needed.                                       #
         ############################################################################
-        pass
+        h0, cache_h0 = affine_forward(features, W_proj, b_proj)
+        x, cache_x = word_embedding_forward(captions_in, W_embed)
+        if self.cell_type == 'rnn':
+          h, cache_h = rnn_forward(x, h0, Wx, Wh, b)
+        elif self.cell_type == 'lstm':
+          h, cache_h = lstm_forward(x, h0, Wx, Wh, b)
+
+        scores, cache_scores = temporal_affine_forward(h, W_vocab, b_vocab)
+        loss, dloss = temporal_softmax_loss(scores, captions_out, mask)
+        
+        # Backward pass:
+        dscores, grads['W_vocab'], grads['b_vocab'] = temporal_affine_backward(dloss, cache_scores)
+        if self.cell_type == 'rnn':
+          dh, dh0, grads['Wx'], grads['Wh'], grads['b'] = rnn_backward(dscores, cache_h)
+        elif self.cell_type == 'lstm':
+          dh, dh0, grads['Wx'], grads['Wh'], grads['b'] = lstm_backward(dscores, cache_h)
+
+        grads['W_embed'] = word_embedding_backward(dh, cache_x)
+        dh0, grads['W_proj'], grads['b_proj'] = affine_backward(dh0, cache_h0)
+        
         ############################################################################
         #                             END OF YOUR CODE                             #
         ############################################################################
@@ -205,7 +224,18 @@ class CaptioningRNN(object):
         # NOTE: we are still working over minibatches in this function. Also if   #
         # you are using an LSTM, initialize the first cell state to zeros.        #
         ###########################################################################
-        pass
+        h, _ = affine_forward(features, W_proj, b_proj)
+        if self.cell_type == 'lstm':
+          c = np.zeros_like(h)
+        captions[:, 0] = self._start
+        for time_step in range(max_length-1):
+          x, _ = word_embedding_forward(captions[:, time_step], W_embed)
+          if self.cell_type == 'rnn':
+            h, _ = rnn_step_forward(x, h, Wx, Wh, b)
+          elif self.cell_type == 'lstm':
+            h, c, _ = lstm_step_forward(x, h, c, Wx, Wh, b)
+          scores, _ = affine_forward(h, W_vocab, b_vocab)
+          captions[:, time_step + 1] = np.argmax(scores, axis=1)
         ############################################################################
         #                             END OF YOUR CODE                             #
         ############################################################################
